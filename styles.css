@@ -1,0 +1,10 @@
+/* Fondo del documento */
+body {
+  background-color: #003366; /* Azul marino */
+  color: #ffffff; /* Texto blanco */
+}
+
+/* Color del texto en diferentes secciones */
+h1, h2, h3, h4, h5, h6 {
+  color: #3399ff; /* Azul claro */
+}
