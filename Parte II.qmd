@@ -1,0 +1,554 @@
+---
+title: "Machine Learning Clasificación"
+author: "Brandon Martinez"
+date: "09/04/2024"
+format: 
+  html:
+    css: "style.css" 
+    theme: cosmo-dark
+    toc: true
+    toc-title: "Contenido"
+    fig-align: left
+    code-fold: true  # Aplica el code folding globalmente
+editor: visual
+editor_options: 
+  chunk_output_type: console
+execute: 
+  echo: true
+---
+
+CLASIFICACIÓN: PIMA INDIANS DIABETES
+
+Modelos Utilizados
+
+-   Regresión Logística
+-   Naive Bayes
+-   Random Forest
+
+## Descripción
+
+*`Este dataset proviene originalmente del Instituto Nacional de Diabetes y Enfermedades Digestivas y Renales. El objetivo es predecir si un paciente tiene diabetes, basado en ciertas mediciones diagnósticas incluidas en el dataset. Todos los pacientes son mujeres de al menos 21 años de edad de ascendencia india Pima.`*
+
+## Variable Objetivo
+
+-   Resultado: 0 (sin diabetes) o 1 (tiene diabetes)
+
+## Características
+
+1.  `Pregnancies` - Número de veces embarazada
+2.  `Glucose` - Concentración de glucosa en plasma
+3.  `BloodPressure` - Presión arterial diastólica (mm Hg)
+4.  `SkinThickness` - Grosor del pliegue cutáneo del tríceps (mm)
+5.  `Insulin` - Insulina sérica a las 2 horas (mu U/ml)
+6.  `BMI` - Índice de masa corporal
+7.  `DiabetesPedigreeFunction`
+8.  `Age` - Edad
+
+## Fuente
+
+-   [Kaggle - Pima Indians Diabetes Database](https://www.kaggle.com/uciml/pima-indians-diabetes-database)
+
+## Carga de Datos y Configuración de Paquetes Necesarios para el Análisis
+
+-   
+
+```{r}
+#| message: false
+#| warning: false
+#| results: hide
+
+
+# Bibliotecas estándar
+library(tidyverse)
+library(ggplot2)
+library(caret)
+library(gt)
+library(gtsummary)
+library(skimr)
+library(tidymodels)
+library(modelsummary)
+library(equatiomatic)
+library(marginaleffects)
+library(skimr)
+library(knitr)
+library(DT)
+```
+
+##### *`Librerías y definiciones previo algunas libreria no utilizaremos pero estas son esecniales bajo este analisis`*
+
+-   
+
+    **Configurar Estilo de Gráficos** \`
+
+```{r}
+   # Establecer estilo de gráficos
+   theme_set(theme_minimal())
+   
+```
+
+*`lo que podria funcionar para un gráfico en particular.`*
+
+4.  **Cargar Datos**
+
+```{r}
+#| message: false
+#| warning: false
+#| results: hide
+#| echo: true
+
+   # Cargar el dataset
+   data <- read.csv("diabetes.csv")
+```
+
+5.  **Explorar Datos**
+
+```{r}
+#| message: false
+#| warning: false
+#| results: hide
+#| echo: true
+   #data
+```
+
+6.  **Verificar Carga de Datos**
+
+-   
+
+```{r}
+#| label: verificacion de datos
+#| message: false
+#| warning: false
+#| results: hide
+#| echo: true
+   cat("Tamaño del dataset:", dim(data)[1], "filas y", dim(data)[2], "columnas\n")
+   head(data)
+   
+
+```
+
+*`obtener una visión general del tipo de datos que estás manejando y cómo están organizado`*
+
+-   
+
+### Etapa 2: **Análisis Exploratorio de Datos (EDA)**
+
+1.  **Resumen de Datos**
+
+**el resumen de datos es una excelente manera de obtener una visión más clara y detallada del dataset con skim**
+
+```{r}
+
+#| label: tabla-interactiva
+#| message: false
+#| warning: false
+#| results: asis
+#| echo: false
+  datatable(skim(data))
+```
+
+*la variable DiabetesPedigreeFunction revela que no tiene valores faltantes, con una media de 0.472, una desviación estándar de 0.331, y valores que van desde 0.078 hasta 2.42, con el 25% de los datos por debajo de 0.244 y el 75% por debajo de 0.626*
+
+-   
+
+2.  **Recuento de Valores Cero**
+
+```{r}
+#| message: false
+#| warning: false
+#| results: hide
+#| echo: true
+
+   cat("<details><summary>Mostrar Recuento de Valores Cero por Columna</summary>\n\n")
+   cat("```r\n")
+   cat("# Recuento de valores cero por columna\n")
+   cat("library(dplyr)\n\n")
+   cat("zero_counts <- data %>%\n")
+   cat("  select(Glucose, BloodPressure, SkinThickness, BMI) %>%\n")
+   cat("  summarize(across(everything(), ~ sum(. == 0)))\n")
+   cat("print(zero_counts)\n")
+   cat("```\n")
+   cat("</details>\n")
+```
+
+-   
+
+3.  **Porcentaje de Filas con Valores Cero**
+
+```{r}
+library(dplyr)
+
+# Definir la función para calcular el porcentaje de filas con valores cero
+zero_percentage <- function(df, columns) {
+  df %>%
+    rowwise() %>%
+    mutate(zero_count = sum(across(all_of(columns), ~ . == 0))) %>%
+    ungroup() %>%
+    summarize(percent_zero_rows = mean(zero_count > 0) * 100) %>%
+    pull()
+}
+
+# Definir las columnas para el análisis
+cols_all <- c("Glucose", "BloodPressure", "BMI", "SkinThickness")  # Asegúrate de cambiar según tus datos
+cols_gbp <- c("Glucose", "BloodPressure", "BMI")  # Ejemplo de columnas a analizar
+
+# Mostrar el porcentaje de filas con valores cero
+cat("\n---Porcentaje de filas con valores cero---\n")
+zero_rows_all <- zero_percentage(data, cols_all)
+cat("% de filas con valores cero en todas las columnas mencionadas:", zero_rows_all, "\n")
+
+zero_rows_gbp <- zero_percentage(data, cols_gbp)
+cat("% de filas con valores cero en las columnas 'Glucose', 'BloodPressure' y 'BMI':", zero_rows_gbp, "\n")
+
+```
+
+-   
+
+4.  **Correlación entre Variables**
+
+```{r}
+
+#| message: false
+#| warning: false
+#| results: hide
+#| echo: true
+
+   correlation_matrix <- cor(data)
+   print(correlation_matrix)
+```
+
+-   
+
+5.  **Gráfico de Correlación**
+
+```{r}
+   library(reshape2)
+   melted_correlation_matrix <- melt(correlation_matrix)
+   ggplot(melted_correlation_matrix, aes(x=Var1, y=Var2, fill=value)) + 
+     geom_tile() + 
+     scale_fill_gradient2(low="blue", high="red", mid="white", 
+                          midpoint=0, limit=c(-1,1), space="Lab", 
+                          name="Correlación") +
+     theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+                                      size = 12, hjust = 1)) +
+     coord_fixed()
+```
+
+-   
+
+6.  **Histogramas para Análisis de Variables**
+
+```{r}
+   histplt <- function(col) {
+     print(paste("----- Outcome vs", col, "-----"))
+     library(ggplot2)
+     p <- ggplot(data, aes_string(x = col, fill = "factor(Outcome)")) +
+       geom_histogram(position = "dodge", binwidth = 5, alpha = 0.7) +
+       labs(title = paste("Outcome vs", col), x = col, y = "Frecuencia") +
+       theme_minimal()
+     print(p)
+   }
+   histplt("Pregnancies")
+   histplt("Glucose")
+   histplt("BloodPressure")
+   histplt("SkinThickness")
+   histplt("Insulin")
+   histplt("BMI")
+   histplt("DiabetesPedigreeFunction")
+```
+
+### Etapa 3: **Transformaciones Iniciales**
+
+-   
+
+1.  **Crear Nuevo DataFrame Excluyendo Filas No Deseadas**
+
+```{r}
+   df_rem <- subset(data, Glucose != 0 & BloodPressure != 0 & BMI != 0)
+   cat("Tamaño del dataframe:", dim(df_rem), "\n")
+   head(df_rem)
+```
+
+*`El propósito de este código es eliminar las filas del dataset original (data) que contienen valores cero en las columnas Glucose, BloodPressure y BMI, ya que estos valores pueden ser inválidos o no informativos`*
+
+-   
+
+2.  **Imputar Valores Faltantes en `SkinThickness`**
+
+```{r}
+   df_impute <- df_rem[df_rem$SkinThickness != 0, ]
+   df_0 <- df_rem[df_rem$SkinThickness == 0, ]
+   linreg <- lm(SkinThickness ~ ., data = df_impute %>% select(-Outcome))
+   df_0$SkinThickness <- predict(linreg, newdata = df_0 %>% select(-SkinThickness, -Outcome))
+   df_impute <- rbind(df_impute, df_0)
+```
+
+-   
+
+```{r}
+#| message: false
+#| warning: false
+#| results: hide
+#| echo: true
+#X <- data[, -which(names(data) == "Outcome")]  # Datos predictivos
+#y <- data$Outcome  # Variable objetivo
+
+```
+
+-   
+
+### Etapa 4 Imputación de Valores Faltantes y Preparación Final de Datos
+
+Filtrado de Filas con Valores No Deseados
+
+```{r}
+df_rem <- subset(data, Glucose != 0 & BloodPressure != 0 & BMI != 0)
+
+```
+
+-   
+
+Verificación del Nuevo DataFrame:
+
+```{r}
+#| message: false
+#| warning: false
+#| results: hide
+#| echo: true
+cat("Tamaño del dataframe:", dim(df_rem), "\n")
+head(df_rem)
+
+```
+
+-   
+
+Separación de Filas con Valores Faltantes en 'SkinThickness':
+
+```{r}
+df_impute <- df_rem[df_rem$SkinThickness != 0, ]
+df_0 <- df_rem[df_rem$SkinThickness == 0, ]
+
+```
+
+-   
+
+Primer bloque (sin caret):
+
+```{r}
+linreg <- lm(SkinThickness ~ ., data = df_impute %>% select(-Outcome))
+df_0$SkinThickness <- predict(linreg, newdata = df_0 %>% select(-SkinThickness, -Outcome))
+
+```
+
+-   
+
+Segundo bloque (con caret)
+
+```{r}
+linreg <- train(SkinThickness ~ ., data = df_impute[, !names(df_impute) %in% c("Outcome")], method = "lm")
+df_0$SkinThickness <- predict(linreg, newdata = df_0[, !names(df_0) %in% c("SkinThickness", "Outcome")])
+
+```
+
+-   
+
+Unificación de los Datos Imputados:
+
+```{r}
+df_impute <- rbind(df_impute, df_0)
+summary(df_impute)
+
+```
+
+-   
+
+### Etapa 5 Preparación de Datos y Variables
+
+-   
+
+```{r}
+library(caret)
+
+# Separar los predictores de la variable objetivo
+X <- df_impute %>% select(-Outcome)
+y <- df_impute$Outcome
+
+cat("Size of X (predictors):", dim(X), "\nSize of y (target):", length(y), "\n")
+
+```
+
+-   
+
+### Etapa 6: Dividir el Conjunto de Datos en Entrenamiento y Prueba
+
+```{r}
+# Dividir el conjunto de datos en conjuntos de entrenamiento y prueba
+set.seed(1)  # Asegura reproducibilidad
+train_index <- createDataPartition(y, p = 0.7, list = FALSE)
+X_train <- X[train_index, ]
+X_test <- X[-train_index, ]
+y_train <- y[train_index]
+y_test <- y[-train_index]
+
+# Verificar las dimensiones para asegurarse de que todo esté en orden
+cat("Size of X_train:", dim(X_train), "\t Size of X_test:", dim(X_test), "\nSize of y_train:", length(y_train), "\t Size of y_test:", length(y_test), "\n")
+
+```
+
+-   
+
+Convertir y_train y y_test a Factores
+
+```{r}
+y_train <- as.factor(y_train)
+y_test <- as.factor(y_test)
+```
+
+-   
+
+### Etapa 7 : Escalar los Datos
+
+```{r}
+# Instanciar el escalador estándar
+scaler <- preProcess(X_train, method = c("center", "scale"))
+
+# Ajustar el escalador al conjunto de entrenamiento
+X_train_scaled <- predict(scaler, X_train)
+
+# Transformar el conjunto de prueba
+X_test_scaled <- predict(scaler, X_test)
+
+```
+
+-   
+
+### Etapa 8 Evaluación y Validación del Modelo
+
+Creación del Modelo de Regresión Logística
+
+aqui se entrena un modelo de regresión logística utilizando el conjunto de datos escalado de entrenamiento. Luego, se realizan predicciones sobre el conjunto de prueba y se muestran las primeras predicciones.
+
+```{r}
+# Crear el modelo de regresión logística
+log_model <- train(X_train_scaled, y_train, method = "glm", family = "binomial")
+
+# Hacer predicciones sobre el conjunto de prueba
+y_pred <- predict(log_model, X_test_scaled)
+
+# Mostrar las primeras predicciones
+head(y_pred)
+
+```
+
+-   
+
+Obtención de Probabilidades y Curva ROC
+
+aqui se en este paso calcula las probabilidades predichas por el modelo para el conjunto de prueba y genera la curva ROC, que se utiliza para evaluar el rendimiento del modelo de clasificación en términos de sensibilidad y especificidad.
+
+```{r}
+library(pROC)
+
+# Obtener las probabilidades predichas
+y_prob <- predict(log_model, X_test_scaled, type = "prob")[,2]
+
+# Calcular la curva ROC
+roc_curve <- roc(y_test, y_prob)
+
+# Plotear la curva ROC
+plot(roc_curve, col = "blue", main = "Curva ROC")
+
+```
+
+# 
+
+-   
+
+Matriz de Confusión y Métricas de Evaluación
+
+Aquí se crea una matriz de confusión comparando las predicciones del modelo con las etiquetas reales del conjunto de prueba. Se imprimen las métricas de evaluación, como precisión, recall y F1-score.
+
+```{r}
+# Asegúrate de tener la librería caret cargada
+library(caret)
+
+# Crear la matriz de confusión entre predicciones y el conjunto de prueba
+conf_matrix <- confusionMatrix(y_pred, y_test)
+
+# Mostrar la matriz de confusión y las métricas de precisión, recall, F1 y otras
+print(conf_matrix)
+
+```
+
+*`El modelo tiene una precisión del 80% y alta sensibilidad (91.77%) para la clase positiva, pero una especificidad baja (54.17%), indicando buena detección de positivos pero menos eficacia en evitar falsos positivos.`*
+
+*`Aunque no ajusté el desbalanceo de clases en este análisis, el modelo muestra una alta sensibilidad y baja especificidad, lo que sugiere que la clase puede estar desbalanceada. Este es un aspecto a considerar para mejorar el rendimiento del modelo en futuras iteraciones`*
+
+-   
+
+Entrenamiento del Modelo con Validación Cruzada de 10 Pliegues
+
+aqui en este paso se entrena el modelo de regresión logística utilizando validación cruzada de 10 pliegues para obtener una estimación más robusta del rendimiento del modelo. Se muestra el resultado de la validación cruzada.
+
+```{r}
+# Asegúrate de tener la librería caret cargada
+library(caret)
+
+# Definir el control de validación cruzada de 10 pliegues
+control <- trainControl(method = "cv", number = 10)
+
+# Entrenar el modelo de regresión logística con validación cruzada de 10 pliegues
+log_model_cv <- train(Outcome ~ ., data = df_impute, method = "glm", family = "binomial", trControl = control)
+
+# Mostrar los resultados de validación cruzada
+print(log_model_cv)
+
+```
+
+*`El modelo lineal generalizado muestra un RMSE de 0.397, un R^2 de 0.307 y un MAE de 0.308, indicando un ajuste moderado con margen para mejorar. La validación cruzada (10 pliegues) sugiere que el modelo es consistente pero podría beneficiarse de ajustes adicionales`*
+
+-   
+
+Entrenamiento y Evaluación del Modelo con Validación Cruzada
+
+aqui en este paso se asegura que la variable objetivo sea un factor, se define un control de validación cruzada con una métrica de precisión, y se entrena el modelo de regresión logística. Luego, se muestra el promedio de precisión obtenida en la validación cruzada.
+
+```{r}
+# Asegúrate de que la variable objetivo es un factor
+df_impute$Outcome <- as.factor(df_impute$Outcome)
+
+
+# Definir el control de validación cruzada de 10 pliegues
+control <- trainControl(method = "cv", number = 10, summaryFunction = defaultSummary)
+
+# Entrenar el modelo de regresión logística con validación cruzada
+log_model_cv <- train(Outcome ~ ., data = df_impute, method = "glm", family = "binomial", trControl = control, metric = "Accuracy")
+
+# Extraer y mostrar el promedio de accuracy
+mean_accuracy <- max(log_model_cv$results$Accuracy) * 100
+print(paste("10-Fold Cross-Validation score for Logistic Regression:", round(mean_accuracy, 2)))
+```
+
+*`El puntaje de 77.35% obtenido a través de la validación cruzada de 10 pliegues para la regresión logística indica que el modelo tiene una precisión del 77.35% en promedio, sugiriendo un buen desempeño en la predicción`*
+
+-   
+
+Visualización de la Matriz de Confusión
+
+aqui se extrae los datos de la matriz de confusión y los visualiza usando un gráfico de calor para mostrar las frecuencias de las predicciones frente a las referencias reales.
+
+```{r}
+library(caret)
+library(ggplot2)
+
+# Extraer los datos de la matriz de confusión
+cf_data <- as.data.frame(as.table(conf_matrix$table))
+
+# Plotear la matriz de confusión
+ggplot(cf_data, aes(Prediction, Reference)) +
+  geom_tile(aes(fill = Freq), color = "white") +
+  scale_fill_gradient(low = "white", high = "red") +
+  geom_text(aes(label = Freq), vjust = 1) +
+  theme_minimal() +
+  labs(title = "Confusion Matrix", fill = "Frequency")
+
+```
