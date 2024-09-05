@@ -17,9 +17,7 @@ execute:
   echo: true
 ---
 
-CLASIFICACIÓN: PIMA INDIANS DIABETES
-
-Modelos Utilizados
+modelso que veras en este script
 
 -   Regresión Logística
 -   Naive Bayes
@@ -27,7 +25,7 @@ Modelos Utilizados
 
 ## Descripción
 
-*`Este dataset proviene originalmente del Instituto Nacional de Diabetes y Enfermedades Digestivas y Renales. El objetivo es predecir si un paciente tiene diabetes, basado en ciertas mediciones diagnósticas incluidas en el dataset. Todos los pacientes son mujeres de al menos 21 años de edad de ascendencia india Pima.`*
+*`analisaremos datos que proviene originalmente del Instituto Nacional de Diabetes y Enfermedades Digestivas y Renales,Todos los pacientes son mujeres de al menos 21 años de edad de ascendencia india Pima.`*
 
 ## Variable Objetivo
 
@@ -221,16 +219,21 @@ cat("% de filas con valores cero en las columnas 'Glucose', 'BloodPressure' y 'B
 5.  **Gráfico de Correlación**
 
 ```{r}
-   library(reshape2)
-   melted_correlation_matrix <- melt(correlation_matrix)
-   ggplot(melted_correlation_matrix, aes(x=Var1, y=Var2, fill=value)) + 
-     geom_tile() + 
-     scale_fill_gradient2(low="blue", high="red", mid="white", 
-                          midpoint=0, limit=c(-1,1), space="Lab", 
-                          name="Correlación") +
-     theme(axis.text.x = element_text(angle = 45, vjust = 1, 
-                                      size = 12, hjust = 1)) +
-     coord_fixed()
+   #library(reshape2)
+library(reshape2)
+library(ggplot2)
+
+melted_correlation_matrix <- melt(correlation_matrix)
+ggplot(melted_correlation_matrix, aes(x=Var1, y=Var2, fill=value)) + 
+  geom_tile() + 
+  scale_fill_gradient2(low="blue", high="red", mid="white", 
+                       midpoint=0, limit=c(-1,1), space="Lab", 
+                       name="Correlación") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+                                   size = 12, hjust = 1)) +
+  coord_fixed()
+
+
 ```
 
 -   
@@ -419,6 +422,36 @@ X_test_scaled <- predict(scaler, X_test)
 
 ```
 
+
+```{r}
+# Verificar la distribución de clases en el conjunto de entrenamiento
+table(y_train)
+
+
+
+```
+
+
+```{r}
+library(DMwR)
+
+# Combinar características y etiquetas en un solo dataframe para el entrenamiento escalado
+train_data_scaled <- data.frame(X_train_scaled, Class = y_train)
+
+# Calcular el número necesario de instancias para la clase minoritaria
+target_count <- max(table(y_train))  # Número de instancias de la clase mayoritaria
+minority_class_count <- table(y_train)[2]  # Número de instancias de la clase minoritaria
+perc.over <- (target_count - minority_class_count) / minority_class_count * 100
+
+# Aplicar SMOTE para balancear las clases
+balanced_data <- SMOTE(Class ~ ., data = train_data_scaled, perc.over = perc.over, perc.under = 100)
+
+# Actualizar X_train_scaled y y_train con los datos balanceados
+X_train_scaled <- balanced_data[, -ncol(balanced_data)]
+y_train <- balanced_data$Class
+
+```
+
 -   
 
 ### Etapa 8 Evaluación y Validación del Modelo
@@ -429,13 +462,28 @@ aqui se entrena un modelo de regresión logística utilizando el conjunto de dat
 
 ```{r}
 # Crear el modelo de regresión logística
-log_model <- train(X_train_scaled, y_train, method = "glm", family = "binomial")
+# Cargar la librería caret si no está cargada
+library(caret)
+
+# Crear un modelo de regresión logística con ajuste de pesos para manejar el desbalance de clases
+log_model <- train(
+  X_train_scaled, 
+  y_train, 
+  method = "glm", 
+  family = "binomial",
+  weights = ifelse(y_train == 1, 1, (sum(y_train == 1) / sum(y_train == 0)))  # Ajuste de pesos
+)
 
 # Hacer predicciones sobre el conjunto de prueba
 y_pred <- predict(log_model, X_test_scaled)
 
 # Mostrar las primeras predicciones
 head(y_pred)
+
+# Evaluar el rendimiento del modelo
+confusionMatrix(y_pred, y_test)
+
+
 
 ```
 
@@ -448,6 +496,8 @@ aqui se en este paso calcula las probabilidades predichas por el modelo para el 
 ```{r}
 library(pROC)
 
+
+
 # Obtener las probabilidades predichas
 y_prob <- predict(log_model, X_test_scaled, type = "prob")[,2]
 
@@ -456,6 +506,7 @@ roc_curve <- roc(y_test, y_prob)
 
 # Plotear la curva ROC
 plot(roc_curve, col = "blue", main = "Curva ROC")
+
 
 ```
 
@@ -530,6 +581,51 @@ print(paste("10-Fold Cross-Validation score for Logistic Regression:", round(mea
 
 *`El puntaje de 77.35% obtenido a través de la validación cruzada de 10 pliegues para la regresión logística indica que el modelo tiene una precisión del 77.35% en promedio, sugiriendo un buen desempeño en la predicción`*
 
+
+
+```{r}
+# Cargar las librerías necesarias
+library(caret)
+library(pROC)
+library(knitr)
+
+# Crear la matriz de confusión entre predicciones y el conjunto de prueba
+conf_matrix <- confusionMatrix(y_pred, y_test)
+
+# Mostrar la matriz de confusión
+kable(conf_matrix$table, caption = "Matriz de Confusión")
+
+# Extraer los valores necesarios para calcular otras métricas
+TN <- conf_matrix$table[1,1]
+FP <- conf_matrix$table[1,2]
+FN <- conf_matrix$table[2,1]
+TP <- conf_matrix$table[2,2]
+
+# Calcular métricas adicionales
+precision <- TP / (TP + FP)
+recall <- TP / (TP + FN)
+f1_score <- 2 * (precision * recall) / (precision + recall)
+specificity <- TN / (TN + FP)
+positive_predictive_value <- TP / (TP + FP)
+negative_predictive_value <- TN / (TN + FN)
+
+# Mostrar las métricas adicionales en una tabla interactiva
+metrics <- data.frame(
+  Metric = c("Precision", "Recall", "F1 Score", "Specificity", "Positive Predictive Value", "Negative Predictive Value"),
+  Value = c(precision, recall, f1_score, specificity, positive_predictive_value, negative_predictive_value)
+)
+
+kable(metrics, caption = "Métricas Adicionales")
+
+# Calcular el Área Bajo la Curva (AUC) de la curva ROC
+roc_curve <- roc(y_test, y_prob)
+auc_value <- auc(roc_curve)
+
+# Mostrar AUC
+cat("AUC: ", auc_value, "\n")
+
+```
+
 -   
 
 Visualización de la Matriz de Confusión
@@ -552,3 +648,10 @@ ggplot(cf_data, aes(Prediction, Reference)) +
   labs(title = "Confusion Matrix", fill = "Frequency")
 
 ```
+
+No es necesario hacer un balance perfecto 50-50, especialmente si el problema no requiere una identificación perfecta de la clase minoritaria.
+
+```{r}
+
+```
+
